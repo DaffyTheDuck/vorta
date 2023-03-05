@@ -1,4 +1,6 @@
 import logging
+from typing import Dict
+from playhouse import signals
 from PyQt5 import uic
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QSizePolicy, QSpacerItem
@@ -22,6 +24,8 @@ class MiscTab(MiscTabBase, MiscTabUI, BackupProfileMixin):
         """Init."""
         super().__init__(parent)
         self.setupUi(parent)
+        self.settings_checkboxes: Dict[str, QCheckBox] = {}
+
         self.versionLabel.setText(__version__)
         self.logLink.setText(
             f'<a href="file://{LOG_DIR}"><span style="text-decoration:' 'underline; color:#0984e3;">Log</span></a>'
@@ -34,6 +38,7 @@ class MiscTab(MiscTabBase, MiscTabUI, BackupProfileMixin):
         self.checkboxLayout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
         self.checkboxLayout.setFormAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.tooltip_buttons = []
+        signals.post_save.connect(self.on_setting_update, sender=SettingsModel)
 
         self.populate()
 
@@ -86,8 +91,8 @@ class MiscTab(MiscTabBase, MiscTabUI, BackupProfileMixin):
 
                 # create widget
                 cb = QCheckBox(translate('settings', setting.label))
+                cb.setChecked(setting.value)
                 cb.setToolTip(setting.tooltip)
-                cb.setCheckState(setting.value)
                 cb.setTristate(False)
                 cb.stateChanged.connect(lambda v, key=setting.key: self.save_setting(key, v))
 
@@ -101,6 +106,7 @@ class MiscTab(MiscTabBase, MiscTabUI, BackupProfileMixin):
                 cbl.addItem(QSpacerItem(0, 0, hPolicy=QSizePolicy.Policy.Expanding))
 
                 # add widget
+                self.settings_checkboxes[setting.key] = cb
                 self.checkboxLayout.setLayout(i, QFormLayout.ItemRole.FieldRole, cbl)
                 self.tooltip_buttons.append(tb)
 
@@ -108,6 +114,39 @@ class MiscTab(MiscTabBase, MiscTabUI, BackupProfileMixin):
                 i += 1
 
         self.set_icons()
+
+    def on_setting_update(self, sender, instance: SettingsModel, created=False):
+        """
+        Handle a update of the settings db.
+        Non-PyQt slot for peewee's `playhouse.signals` api.
+        It calls `update_checkbox`.
+
+        Parameters
+        ----------
+        sender : Type[SettingsModel]
+            table sending model
+        instance : SettingsModel
+            The model instance (row) saved.
+        created : bool, optional
+            Whether it was newly created, by default False
+        """
+        if not created and instance.type == 'checkbox':
+            self.update_checkbox(instance.key, instance.value)
+
+    def update_checkbox(self, key, value):
+        """
+        Update the checkbox for a setting with a given key.
+
+        Parameters
+        ----------
+        key : str
+            The key of the setting to update.
+        value : bool
+            The value to set the checkbox to.
+        """
+        checkbox = self.settings_checkboxes.get(key)
+        if checkbox:
+            checkbox.setChecked(value)
 
     def set_icons(self):
         """Set or update the icons in this view."""

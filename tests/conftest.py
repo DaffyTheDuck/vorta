@@ -4,9 +4,11 @@ from datetime import datetime as dt
 from unittest.mock import MagicMock
 import pytest
 from peewee import SqliteDatabase
+from playhouse import signals
 import vorta
 import vorta.application
 import vorta.borg.jobs_manager
+from vorta.store.connection import setup_autostart
 from vorta.store.models import (
     ArchiveModel,
     BackupProfileModel,
@@ -89,6 +91,12 @@ def init_db(qapp, qtbot, tmpdir_factory):
 
     source_dir = SourceFileModel(dir='/tmp/another', repo=new_repo, dir_size=100, dir_files_count=18, path_isdir=True)
     source_dir.save()
+
+    # disconnect all signals because of bug coleifer/peewee#2687 (https://github.com/coleifer/peewee/issues/2687)
+    signals.post_save.disconnect(receiver=qapp.main_window.miscTab.on_setting_update, sender=SettingsModel)
+    # reconnect autostart signal
+    signals.post_save.disconnect(setup_autostart, sender=SettingsModel)
+    signals.post_save.connect(setup_autostart, sender=SettingsModel)
 
     qapp.main_window.deleteLater()
     del qapp.main_window
