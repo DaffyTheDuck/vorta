@@ -92,21 +92,24 @@ def init_db(qapp, qtbot, tmpdir_factory):
     source_dir = SourceFileModel(dir='/tmp/another', repo=new_repo, dir_size=100, dir_files_count=18, path_isdir=True)
     source_dir.save()
 
-    # disconnect all signals because of bug coleifer/peewee#2687 (https://github.com/coleifer/peewee/issues/2687)
-    signals.post_save.disconnect(receiver=qapp.main_window.miscTab.on_setting_update, sender=SettingsModel)
-    # reconnect autostart signal
-    signals.post_save.disconnect(setup_autostart, sender=SettingsModel)
-    signals.post_save.connect(setup_autostart, sender=SettingsModel)
-
     qapp.main_window.deleteLater()
     del qapp.main_window
     qapp.main_window = MainWindow(qapp)  # Re-open main window to apply mock data in UI
 
     yield
 
+    # disconnect peewee instance signals
+    signals.post_save.disconnect(receiver=qapp.main_window.miscTab.on_setting_update, sender=SettingsModel)
+
+    # reconnect autostart signal because of bug https://github.com/coleifer/peewee/issues/2687
+    signals.post_save.disconnect(setup_autostart, sender=SettingsModel)
+    signals.post_save.connect(setup_autostart, sender=SettingsModel)
+
+    # disconnect qt signals
     qapp.jobs_manager.cancel_all_jobs()
     qapp.backup_finished_event.disconnect()
     qapp.scheduler.schedule_changed.disconnect()
+
     qtbot.waitUntil(lambda: not qapp.jobs_manager.is_worker_running(), **pytest._wait_defaults)
     mock_db.close()
 
